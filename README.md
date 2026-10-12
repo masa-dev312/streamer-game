@@ -6,4 +6,4 @@
 
 ## 資料
 - [docs/planning.md](docs/planning.md): 企画書
-- [docs/review.md](docs/review.md): ボードゲーム専門家・想定ユーザー・セキュリティ専門家・配信の専門家の視点でのレビュー記録
+- [docs/review.md](docs/review.md): ボードゲーム・想定ユーザー・セキュリティ・配信・盛り上がりの5つの視点でのレビュー記録
