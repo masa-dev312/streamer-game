@@ -67,7 +67,7 @@ export function sanitizeName(raw, fallback = 'あなた') {
 
 export function createGame({ humanName, botCount, mode, seed = Date.now() }) {
   const rng = makeRng(seed);
-  const colors = ['#ff6b6b', '#4dabf7', '#51cf66', '#fcc419'];
+  const colors = ['#4dabf7', '#69db7c', '#f783ac', '#e9ecef']; // 赤はワナ、黄は宝箱専用にするため使わない
   const players = [{
     id: 0, name: sanitizeName(humanName), isBot: false, personality: null,
     pos: 0, hand: [], color: colors[0],

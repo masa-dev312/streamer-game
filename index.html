@@ -6,79 +6,83 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <title>ワナしかけダンジョン(試作)</title>
 <link rel="icon" href="data:,">
-<link rel="stylesheet" href="style.css?v=1">
+<link rel="stylesheet" href="style.css?v=2">
 </head>
 <body>
 <header class="top">
   <h1>ワナしかけダンジョン <span class="tag">試作・ボット対戦</span></h1>
-  <label class="mute"><input type="checkbox" id="mute"> 音を消す</label>
-  <label class="mute"><input type="checkbox" id="fast"> 早送り</label>
+  <label class="toggle"><input type="checkbox" id="mute"> 音を消す</label>
+  <label class="toggle"><input type="checkbox" id="fast"> 早送り</label>
 </header>
 
 <main class="layout">
   <section class="stream">
-    <div class="caption">配信画面(OBS に取り込む想定の画面)</div>
+    <div class="caption">配信画面(OBS に取り込む想定)</div>
     <canvas id="board" width="960" height="540"></canvas>
   </section>
 
-  <section class="hand" id="hand">
-    <div class="caption">手元画面(配信に映さない想定の画面)</div>
-    <div id="phase" class="phase"></div>
-    <div id="controls"></div>
-    <h3>自分が置いた仕掛け</h3>
-    <ul id="mine" class="mine"></ul>
-    <h3>記録</h3>
-    <ol id="log" class="log"></ol>
-  </section>
+  <aside class="hand" id="hand">
+    <div class="caption">手元画面(配信に映さない想定)</div>
+
+    <div id="title">
+      <h2>ゲームの準備</h2>
+      <label class="field">表示名 <input id="name" maxlength="20" placeholder="あなた" autocomplete="off"></label>
+      <p class="note">名前は配信画面に大きく出ます。本名は入れないでください。</p>
+      <label class="field">相手のボット
+        <select id="bots">
+          <option value="1">1人(2人対戦)</option>
+          <option value="2" selected>2人(3人対戦)</option>
+          <option value="3">3人(4人対戦)</option>
+        </select>
+      </label>
+      <div class="field">配信画面に伏せた仕掛けを
+        <div id="modes" class="modes"></div>
+        <p id="modeDesc" class="note"></p>
+      </div>
+      <button id="start" class="primary big">はじめる</button>
+      <details>
+        <summary>ルール</summary>
+        <ul class="rules">
+          <li>毎ラウンド、まず全員が手札から仕掛けを選んで、だれかのコマの先(8マス先まで)に伏せて置きます。</li>
+          <li>次に、一番後ろの人から順番にサイコロを2個振り、どちらかの目を選んで進みます。</li>
+          <li><b>ワナ</b>: 踏んだ人は3マス戻り、仕掛けた人が2マス進みます(踏んだ人が前にいたら+1)。自分のワナを踏むと「自爆」で3マス戻ります。</li>
+          <li><b>宝箱</b>: 踏んだ人が3マス進みます。他人の宝箱なら横取りです。</li>
+          <li><b>見せかけ</b>: 何も起きません。配信画面にはワナと同じ見た目で映るので、相手や視聴者をだませます(隠すモードでは使いません)。</li>
+          <li><b>ダンジョンのいたずら</b>: だれのものでもないワナが、ときどき先頭の人の先に置かれます。</li>
+          <li>ダンジョンを一周してゴールに最初に着いた人が勝ち。14ラウンドで終わったときは、一番進んでいる人が勝ちです。</li>
+        </ul>
+      </details>
+    </div>
+
+    <div id="play" class="hidden">
+      <div id="phase" class="phase"></div>
+      <div id="controls"></div>
+      <details class="more" open>
+        <summary>自分が置いた仕掛け</summary>
+        <ul id="mine" class="mine"></ul>
+      </details>
+      <details class="more">
+        <summary>記録</summary>
+        <p id="deck" class="note"></p>
+        <ol id="log" class="log"></ol>
+      </details>
+    </div>
+
+    <div id="result" class="hidden">
+      <h2 id="resultTitle"></h2>
+      <ol id="rankList"></ol>
+      <h3>表彰</h3>
+      <ul id="awardList"></ul>
+      <details class="more">
+        <summary>リプレイ(発動した仕掛け)</summary>
+        <ol id="replayList" class="log"></ol>
+      </details>
+      <p class="note">配信画面では、置かれたままだった仕掛けもすべて公開しています。</p>
+      <button id="again" class="primary big">もう一度</button>
+    </div>
+  </aside>
 </main>
 
-<div id="title" class="overlay">
-  <div class="panel">
-    <h2>ワナしかけダンジョン</h2>
-    <p>おたがいの行く先にワナや宝箱を伏せて置き、ゴールを目指すすごろくレースです。この試作では、ボットを相手に1人で遊べます。</p>
-    <label>表示名 <input id="name" maxlength="20" placeholder="あなた" autocomplete="off"></label>
-    <p class="note">名前は配信画面に大きく出ます。本名は入れないでください。</p>
-    <label>ボットの人数
-      <select id="bots">
-        <option value="1">1人(2人対戦)</option>
-        <option value="2" selected>2人(3人対戦)</option>
-        <option value="3">3人(4人対戦)</option>
-      </select>
-    </label>
-    <fieldset>
-      <legend>表示モード(配信画面に伏せた仕掛けをどう映すか。開始後は変えられません)</legend>
-      <div id="modes"></div>
-    </fieldset>
-    <button id="start" class="primary">はじめる</button>
-    <details>
-      <summary>ルール</summary>
-      <ul>
-        <li>毎ラウンド、まず全員が手札から仕掛けを選んで、だれかのコマの先(8マス先まで)に伏せて置きます。</li>
-        <li>次に、一番後ろの人から順番にサイコロを2個振り、どちらかの目を選んで進みます。</li>
-        <li><b>ワナ</b>: 踏んだ人は3マス戻り、仕掛けた人が2マス進みます(踏んだ人が前にいたら+1)。自分のワナを踏むと「自爆」で3マス戻ります。</li>
-        <li><b>宝箱</b>: 踏んだ人が3マス進みます。他人の宝箱なら横取りです。</li>
-        <li><b>見せかけ</b>: 何も起きません。配信画面にはワナと同じ見た目で映るので、覗き見する相手や視聴者をだませます(隠すモードでは使いません)。</li>
-        <li><b>ダンジョンのいたずら</b>: だれのものでもないワナが、ときどき先頭の人の先に置かれます。</li>
-        <li>ゴールに最初に着いた人が勝ち。14ラウンドで終わったときは、一番進んでいる人が勝ちです。</li>
-      </ul>
-    </details>
-  </div>
-</div>
-
-<div id="result" class="overlay hidden">
-  <div class="panel">
-    <h2 id="resultTitle"></h2>
-    <ol id="rankList"></ol>
-    <h3>表彰</h3>
-    <ul id="awardList"></ul>
-    <h3>リプレイ(発動した仕掛け)</h3>
-    <ol id="replayList" class="log"></ol>
-    <p class="note">配信画面では、置かれたままだった仕掛けもすべて公開しています。</p>
-    <button id="viewBoard">配信画面で全配置を見る</button>
-    <button id="again" class="primary">もう一度</button>
-  </div>
-</div>
-
-<script type="module" src="src/main.js?v=1"></script>
+<script type="module" src="src/main.js?v=2"></script>
 </body>
 </html>
