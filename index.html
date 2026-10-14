@@ -6,7 +6,7 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <title>ワナしかけダンジョン(試作)</title>
 <link rel="icon" href="data:,">
-<link rel="stylesheet" href="style.css?v=2">
+<link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
 <header class="top">
@@ -49,6 +49,14 @@
           <li><b>宝箱</b>: 踏んだ人が3マス進みます。他人の宝箱なら横取りです。</li>
           <li><b>見せかけ</b>: 何も起きません。配信画面にはワナと同じ見た目で映るので、相手や視聴者をだませます(隠すモードでは使いません)。</li>
           <li><b>ダンジョンのいたずら</b>: だれのものでもないワナが、ときどき先頭の人の先に置かれます。</li>
+          <li><b>逆転の仕組み</b>(差が開いたときだけ働きます):
+            <ul>
+              <li>賞金首: 先頭が2位より3マス以上前にいると、先頭にワナを当てた人は追加で進めます(差3ごとに+1、最大+3)。</li>
+              <li>重い荷物: 先頭が2位より6マス以上前にいると、先頭のサイコロは1個だけで、目を選べません。</li>
+              <li>最下位ボーナス: 最下位が先頭から6マス以上遅れていると、そのラウンドは置ける数が1つ多くなります。</li>
+              <li>追い上げの一手: 先頭から10マス以上遅れている人は、サイコロ2個の合計でも進めます。</li>
+            </ul>
+          </li>
           <li>ダンジョンを一周してゴールに最初に着いた人が勝ち。14ラウンドで終わったときは、一番進んでいる人が勝ちです。</li>
         </ul>
       </details>
@@ -83,6 +91,6 @@
   </aside>
 </main>
 
-<script type="module" src="src/main.js?v=2"></script>
+<script type="module" src="src/main.js?v=3"></script>
 </body>
 </html>
