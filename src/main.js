@@ -2,8 +2,8 @@
 import {
   TUNE, MODES, CARD_LABEL, NEUTRAL, createGame, validSquares, place, placeLimit, placedCount,
   endPlacement, currentMover, rollDice, destination, botChooseDie, move, deckCounts,
-  ranking, awards, visibleOnStream,
-} from './rules.js';
+  ranking, awards, visibleOnStream, moveChoices, isHeavy, isTrailing, canUseSum, bountyValue, soleLeader,
+} from './rules.js?v=3';
 
 const MODE_DESC = {
   hide: '配信画面には公開済みの情報だけ。参加者どうしの読み合いと、踏んだ瞬間の驚きを楽しむ(コラボ向け)',
@@ -339,6 +339,8 @@ function pathPoint(f) {
 }
 function drawPieces(now) {
   const mover = currentMover(st);
+  const sl = st.over ? null : soleLeader(st);
+  const bounty = sl && bountyValue(st) > 0 ? { pid: sl.player.id } : null;
   const at = st.players.map(p => ({ p, ...viewPos(p.id, now) }));
   const bySq = new Map();
   for (const a of at) {
@@ -377,6 +379,12 @@ function drawPieces(now) {
     ctx.beginPath(); ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2); ctx.fill();
     ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.stroke();
     label(initial(d.p), d.x, d.y + 1, '#111', d.r > 15 ? 16 : 13, 'center', 'bold');
+    if (bounty && bounty.pid === d.p.id) {
+      // 賞金首の印
+      ctx.fillStyle = C.trap; ctx.beginPath(); ctx.arc(d.x + d.r * 0.8, d.y - d.r * 0.8, 9, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+      label('賞', d.x + d.r * 0.8, d.y - d.r * 0.8 + 1, '#fff', 11, 'center', 'bold');
+    }
   }
 }
 
@@ -400,18 +408,41 @@ function drawStandings(x, y, w, rowH, now) {
     label(String(rank), x + 16, ry + (rowH - 6) / 2, rank === 1 ? C.gold : C.sub, 20, 'center', 'bold');
     ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(x + 42, ry + (rowH - 6) / 2, 12, 0, Math.PI * 2); ctx.fill();
     label(initial(p), x + 42, ry + (rowH - 6) / 2 + 1, '#111', 13, 'center', 'bold');
-    const nameW = w - 62 - 96;
-    label(fit(p.name, nameW, 18), x + 62, ry + 14, C.text, 18, 'left', 'bold');
+    const tags = statusTags(p);
+    const nameW = w - 62 - 96 - tags.length * 70;
+    const shown = fit(p.name, Math.max(40, nameW), 18);
+    label(shown, x + 62, ry + 14, C.text, 18, 'left', 'bold');
+    ctx.font = `bold 18px ${FONT}`;
+    let tx = x + 62 + ctx.measureText(shown).width + 8;
+    for (const t of tags) {
+      ctx.font = `bold 12px ${FONT}`;
+      const tw = ctx.measureText(t.text).width + 12;
+      ctx.fillStyle = t.bg; roundRect(tx, ry + 5, tw, 18, 9); ctx.fill();
+      label(t.text, tx + tw / 2, ry + 14.5, t.fg, 12, 'center', 'bold');
+      tx += tw + 4;
+    }
     // レース棒: ゴールまでの進み具合
     const bx = x + 62, bw = w - 62 - 72, by = ry + rowH - 20;
     ctx.fillStyle = C.stoneLo; roundRect(bx, by, bw, 8, 4); ctx.fill();
     const vp = viewPos(p.id, now).f;
     ctx.fillStyle = p.color; roundRect(bx, by, Math.max(8, (bw * vp) / TUNE.goal), 8, 4); ctx.fill();
     let right = `あと${TUNE.goal - p.pos}`;
-    if (st.phase === 'place') right = placedCount(st, p.id) >= placeLimit(st) || (p.isBot && ui.botsDone) ? '伏せ終えた' : '仕掛け中…';
+    if (st.phase === 'place') right = placedCount(st, p.id) >= placeLimit(st, p.id) || (p.isBot && ui.botsDone) ? '伏せ終えた' : '仕掛け中…';
     if (st.over && st.winner === p.id) right = '勝ち!';
     label(right, x + w - 10, ry + 14, isMover ? C.hilite : C.sub, 15, 'right', 'bold');
   });
+}
+
+// 逆転の仕組みの状態を、順位の欄に小さな札で出す
+function statusTags(p) {
+  if (st.over) return [];
+  const tags = [];
+  const b = bountyValue(st);
+  if (b > 0 && soleLeader(st)?.player.id === p.id) tags.push({ text: `賞金+${b}`, bg: C.trap, fg: '#fff' });
+  if (isHeavy(st, p.id)) tags.push({ text: '重い荷物', bg: '#5c5048', fg: C.text });
+  if (isTrailing(st, p.id)) tags.push({ text: '置ける+1', bg: '#2b5a3a', fg: C.text });
+  if (canUseSum(st, p.id)) tags.push({ text: '追い上げ', bg: '#1c4f7a', fg: C.text });
+  return tags;
 }
 
 function drawStage(now) {
@@ -452,17 +483,27 @@ function drawStage(now) {
 
 function drawDiceArea(x, y, w, h) {
   if (ui.dice) {
-    const size = Math.min(76, h - 40, (w - 30) / 2);
-    const gap = Math.min(40, w - size * 2);
-    const total = size * 2 + gap;
+    const n = ui.dice.length;
+    const gap = n > 2 ? 18 : 40;
+    const size = Math.min(76, h - 46, (w - gap * (n - 1)) / n);
+    const total = size * n + gap * (n - 1);
     ui.dice.forEach((d, i) => {
-      const dx = x + (w - total) / 2 + i * (size + gap), dy = y + (h - size - 26) / 2;
+      const dx = x + (w - total) / 2 + i * (size + gap), dy = y + (h - size - 30) / 2;
       const dim = ui.chosen !== null && ui.chosen !== i;
-      drawDie(dx, dy, size, d.die, C.text, dim);
+      if (d.sum) {
+        // 追い上げの一手: 2個の合計
+        ctx.globalAlpha = dim ? 0.35 : 1;
+        ctx.fillStyle = '#1c4f7a'; roundRect(dx, dy, size, size, size * 0.18); ctx.fill();
+        ctx.strokeStyle = '#74c0fc'; ctx.lineWidth = 3; ctx.stroke();
+        label('合計', dx + size / 2, dy + size * 0.3, '#d0ebff', Math.round(size * 0.2), 'center', 'bold');
+        label(String(d.die), dx + size / 2, dy + size * 0.65, '#fff', Math.round(size * 0.42), 'center', 'bold');
+        ctx.globalAlpha = 1;
+      } else drawDie(dx, dy, size, d.die, C.text, dim);
       if (!dim) label(d.dest >= TUNE.goal ? 'ゴール!' : `${d.dest}マス目へ`, dx + size / 2, dy + size + 18, C.sub, 15, 'center', 'bold');
     });
+    if (n === 1) label('重い荷物: 目を選べない', x + w / 2, y + (h + size) / 2 + 10, C.sub, 14, 'center', 'bold');
   } else if (st.phase === 'place' && st.round === 1) {
-    const lines = ['ワナや宝箱を', 'だれかの先に伏せて置く', '→ サイコロ2個から1つ選んで進む', '先にゴールした人の勝ち'];
+    const lines = ['ワナや宝箱を', 'だれかの先に伏せて置く', '→ サイコロ2個から1つ選んで進む', '離れた先頭は賞金首、遅れた人は追い上げ'];
     lines.forEach((t, i) => label(t, x + w / 2, y + h / 2 - 45 + i * 30, i === 2 ? C.gold : C.sub, 16, 'center', 'bold'));
   } else {
     // 伏せマスの数(配信の見どころ)
@@ -646,7 +687,7 @@ function canvasPoint(ev) {
 function placementUI(resolve) {
   clearControls();
   const me = st.players[0];
-  const left = placeLimit(st) - placedCount(st, 0);
+  const left = placeLimit(st, 0) - placedCount(st, 0);
   setPhase(left > 0 ? `仕掛けを伏せよう(あと${left}個)` : '伏せ終わりました');
   const wrap = document.createElement('div'); wrap.className = 'cards';
   me.hand.forEach((type, i) => {
@@ -665,6 +706,9 @@ function placementUI(resolve) {
   } else if (left > 0) {
     addHint('札を選んで、盤面の光るマスに伏せます。置かずに進めてもかまいません。');
   }
+  if (isTrailing(st, 0)) addHint('最下位ボーナス: このラウンドは置ける数が1つ多い', 'alert');
+  const sl = soleLeader(st);
+  if (sl && sl.player.id !== 0 && bountyValue(st) > 0) addHint(`${sl.player.name}は賞金首。ワナを当てると追加で${bountyValue(st)}マス進める`, 'alert');
   addButton(left > 0 ? '置かずに進む' : 'サイコロへ進む', () => { ui.selected = null; ui.valid = null; resolve(); }, left > 0 ? 'big' : 'primary big');
   canvas.onclick = ev => {
     if (ui.selected === null) return;
@@ -697,27 +741,29 @@ function waitHumanRoll() {
 function waitHumanChoice() {
   return new Promise(resolve => {
     clearControls();
-    setPhase('どちらの目で進む?');
+    const choices = moveChoices(st);
+    setPhase(choices.length === 1 ? '重い荷物: この目で進みます' : 'どの目で進む?');
     const row = document.createElement('div'); row.className = 'dice-choice';
-    st.dice.forEach((d, i) => {
+    choices.forEach((d, i) => {
       const dest = destination(st, 0, d);
       const it = st.items.get(dest);
       const note = dest >= TUNE.goal ? 'ゴール!' : it && it.owner === 0 ? `自分の${CARD_LABEL[it.type]}` : it ? '伏せマス' : `${dest}マス目`;
       const b = document.createElement('button');
-      const big = document.createElement('b'); big.textContent = String(d);
+      const big = document.createElement('b'); big.textContent = i === 2 ? `合計${d}` : String(d);
       const small = document.createElement('small'); small.textContent = note;
       b.append(big, small);
       b.addEventListener('click', () => { clearControls(); setPhase('移動中…'); resolve(i); });
       row.append(b);
     });
     $('controls').append(row);
-    addHint('盤面で光っている2つのマスが行き先です。');
+    addHint(choices.length === 3 ? '先頭から離れているので、2個の合計でも進めます(追い上げの一手)。' :
+      choices.length === 1 ? '先頭で2位から離れているので、サイコロは1個だけです(重い荷物)。' : '盤面で光っている2つのマスが行き先です。');
   });
 }
 
 // ---------- 進行 ----------
 async function resolveLanding(mover, idx) {
-  const die = st.dice[idx];
+  const die = moveChoices(st)[idx];
   const from = mover.pos;
   const dest = destination(st, mover.id, die);
   const it = st.items.get(dest);
@@ -744,13 +790,19 @@ async function resolveLanding(mover, idx) {
   const ev = move(st, idx);
   renderMine();
   const m = st.players[ev.mover];
+  if (ev.usedSum) logLine(`${m.name}が追い上げの一手(合計${ev.die})`);
   if (ev.item) {
     const o = ownerName(ev.item.owner);
     const ago = roundsAgo(ev.item);
     if (ev.effect === 'trap') {
       sfx.trap(); burst(dest, [C.trap, '#ff8787', C.hilite], 70, 1.2); shake(12, 500);
-      announce('ワナ!', [`${o}のワナ(${ago})`, `${m.name} ${TUNE.trapBack}マス戻る / ${o} ${ev.ownerGain}マス進む`], C.trap, 'big');
-      logLine(`${m.name}が${o}のワナを踏んだ(${ago})`);
+      if (ev.bounty) {
+        announce('賞金首!', [`${o}が先頭の${m.name}を仕留めた(賞金+${ev.bounty})`, `${m.name} ${TUNE.trapBack}マス戻る / ${o} ${ev.ownerGain}マス進む`], C.trap, 'big');
+        logLine(`${m.name}が${o}のワナを踏んだ(賞金+${ev.bounty})`);
+      } else {
+        announce('ワナ!', [`${o}のワナ(${ago})`, `${m.name} ${TUNE.trapBack}マス戻る / ${o} ${ev.ownerGain}マス進む`], C.trap, 'big');
+        logLine(`${m.name}が${o}のワナを踏んだ(${ago})`);
+      }
       await sleep(700);
       const owner = ev.item.owner;
       await Promise.all([walk(m.id, dest, ev.to, 170), walk(owner, before[owner], st.players[owner].pos, 170)]);
@@ -812,6 +864,10 @@ function ownerName(owner) {
   return owner === NEUTRAL ? 'ダンジョンのいたずら' : st.players[owner].name;
 }
 
+function diceView(pid) {
+  return moveChoices(st).map((d, i) => ({ die: d, dest: destination(st, pid, d), sum: i === 2 }));
+}
+
 async function runGame(game) {
   let lastRound = 0;
   while (!game.over && st === game) {
@@ -844,13 +900,13 @@ async function runGame(game) {
       setPhase(`${mover.name}の番`);
       await sleep(450);
       rollDice(st); sfx.dice();
-      ui.dice = st.dice.map(d => ({ die: d, dest: destination(st, mover.id, d) }));
+      ui.dice = diceView(mover.id);
       await sleep(1100); // 迷う時間
       idx = botChooseDie(st, mover.id);
     } else {
       await waitHumanRoll();
       rollDice(st); sfx.dice();
-      ui.dice = st.dice.map(d => ({ die: d, dest: destination(st, 0, d) }));
+      ui.dice = diceView(0);
       idx = await waitHumanChoice();
     }
     await resolveLanding(mover, idx);
@@ -945,4 +1001,5 @@ if (new URLSearchParams(location.search).has('debug')) {
     return { x: canvas.clientLeft + (x * canvas.clientWidth) / L.W, y: canvas.clientTop + (y * canvas.clientHeight) / L.H };
   };
   window.__eventOn = () => !!ui.event && performance.now() < ui.event.until;
+  window.__tagsOn = () => !!st && !st.over && st.players.some(p => statusTags(p).length > 0) && !!ui.dice;
 }

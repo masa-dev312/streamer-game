@@ -16,6 +16,12 @@ export const TUNE = {
   treasureGain: 3,      // 宝箱で進むマス数
   neutralChance: 0.35,  // 各ラウンドに「ダンジョンのいたずら」が置かれる確率
   deck: { trap: 18, treasure: 10, fake: 6 }, // 山札の内訳(見せかけは隠すモードでは入れない)
+  // 逆転の仕組み(null で無効)
+  heavyGap: 6,          // 重い荷物: 先頭が2位よりこのマス数以上前なら、先頭のサイコロは1個だけ(目を選べない)
+  bountyDiv: 3,         // 賞金首: 先頭にワナを当てた人は「先頭と2位の差 ÷ この数(切り捨て)」マス多く進む
+  bountyMax: 3,         //   賞金の上限
+  trailerPlaceGap: 6,   // 最下位が先頭からこのマス数以上遅れていたら、置ける数 +1
+  sumGap: 10,           // 追い上げの一手: 先頭からこのマス数以上遅れている人は、サイコロ2個の合計でも進める
 };
 
 export const MODES = {
@@ -81,7 +87,7 @@ export function createGame({ humanName, botCount, mode, seed = Date.now() }) {
     });
   }
   for (const p of players) {
-    p.stats = { trapHits: 0, steals: 0, selfDestructs: 0, targeted: 0, nearMiss: 0, trapped: 0 };
+    p.stats = { bounties: 0, trapHits: 0, steals: 0, selfDestructs: 0, targeted: 0, nearMiss: 0, trapped: 0 };
   }
   const deckDef = { ...TUNE.deck };
   if (mode === 'hide') deckDef.fake = 0;
@@ -114,6 +120,16 @@ function rankOrder(state) {
   return state.players.slice().sort((a, b) => b.pos - a.pos || a.id - b.id);
 }
 
+// 単独の先頭と、2位との差。並んでいたら null
+export function soleLeader(state) {
+  const o = rankOrder(state);
+  return o[0].pos > o[1].pos ? { player: o[0], lead: o[0].pos - o[1].pos } : null;
+}
+
+function leaderPos(state) {
+  return Math.max(...state.players.map(p => p.pos));
+}
+
 export function lastPlaceIds(state) {
   const min = Math.min(...state.players.map(p => p.pos));
   const max = Math.max(...state.players.map(p => p.pos));
@@ -136,8 +152,21 @@ export function deckCounts(state) {
   return c;
 }
 
-export function placeLimit(state) {
-  return TUNE.placePerRound[state.players.length] ?? 1;
+export function placeLimit(state, pid = null) {
+  const base = TUNE.placePerRound[state.players.length] ?? 1;
+  return base + (pid !== null && isTrailing(state, pid) ? 1 : 0);
+}
+
+// 最下位(単独)で、先頭から trailerPlaceGap 以上遅れているか
+export function isTrailing(state, pid) {
+  if (TUNE.trailerPlaceGap == null) return false;
+  const ids = lastPlaceIds(state);
+  return ids.length === 1 && ids[0] === pid && leaderPos(state) - state.players[pid].pos >= TUNE.trailerPlaceGap;
+}
+
+// 追い上げの一手を使えるか
+export function canUseSum(state, pid) {
+  return TUNE.sumGap != null && leaderPos(state) - state.players[pid].pos >= TUNE.sumGap;
 }
 
 export function placedCount(state, pid) {
@@ -169,7 +198,7 @@ export function place(state, pid, handIdx, sq) {
   const p = state.players[pid];
   const type = p.hand[handIdx];
   if (!type) return false;
-  if (placedCount(state, pid) >= placeLimit(state)) return false;
+  if (placedCount(state, pid) >= placeLimit(state, pid)) return false;
   const valid = validSquares(state, pid, type);
   if (!valid.has(sq)) return false;
   const target = valid.get(sq);
@@ -184,7 +213,7 @@ export function botPlace(state, pid) {
   const p = state.players[pid];
   const rng = state.rng;
   let guard = 0;
-  while (placedCount(state, pid) < placeLimit(state) && p.hand.length && guard++ < 10) {
+  while (placedCount(state, pid) < placeLimit(state, pid) && p.hand.length && guard++ < 10) {
     // 置く札を選ぶ: ワナ優先、見せかけはときどき、宝箱は自分の先に
     let idx = p.hand.indexOf('trap');
     if (p.hand.includes('fake') && rng() < 0.35) idx = p.hand.indexOf('fake');
@@ -240,8 +269,30 @@ export function currentMover(state) {
 
 export function rollDice(state) {
   const r = () => 1 + Math.floor(state.rng() * 6);
-  state.dice = [r(), r()];
+  state.dice = isHeavy(state, currentMover(state)?.id) ? [r()] : [r(), r()];
   return state.dice;
+}
+
+// 重い荷物を背負っているか(単独の先頭で、2位より heavyGap 以上前)
+export function isHeavy(state, pid) {
+  const sl = soleLeader(state);
+  return TUNE.heavyGap != null && !!sl && sl.player.id === pid && sl.lead >= TUNE.heavyGap;
+}
+
+// 賞金首: 単独の先頭にワナを当てたときの追加の前進。先頭がいなければ 0
+export function bountyValue(state) {
+  const sl = soleLeader(state);
+  if (TUNE.bountyDiv == null || !sl) return 0;
+  return Math.min(TUNE.bountyMax, Math.floor(sl.lead / TUNE.bountyDiv));
+}
+
+// 選べる進み方(マス数)。サイコロ2個の目、追い上げの一手が使えるなら合計も
+export function moveChoices(state) {
+  const p = currentMover(state);
+  if (!p || !state.dice) return [];
+  const c = state.dice.slice();
+  if (c.length === 2 && canUseSum(state, p.id)) c.push(state.dice[0] + state.dice[1]);
+  return c;
 }
 
 export function destination(state, pid, die) {
@@ -251,7 +302,7 @@ export function destination(state, pid, die) {
 // ボットの目の選び方。ボットは自分の仕掛けと「伏せマスがある」ことしか知らない
 export function botChooseDie(state, pid) {
   const p = state.players[pid];
-  const scores = state.dice.map(d => {
+  const scores = moveChoices(state).map(d => {
     const dest = destination(state, pid, d);
     let s = d * (p.personality === 'bold' ? 4 : 2);
     if (dest >= TUNE.goal) s += 1000;
@@ -262,18 +313,21 @@ export function botChooseDie(state, pid) {
     }
     return s + state.rng() * 0.5;
   });
-  return scores[0] >= scores[1] ? 0 : 1;
+  return scores.indexOf(Math.max(...scores));
 }
 
 // 目を選んで進む。発動した仕掛けをイベントとして返す
 export function move(state, dieIdx) {
   const p = currentMover(state);
   if (!p || !state.dice) return null;
-  const die = state.dice[dieIdx];
+  const die = moveChoices(state)[dieIdx];
+  if (die === undefined) return null;
+  const leaderBefore = soleLeader(state);
+  const bountyBefore = bountyValue(state);
   const from = p.pos;
   const dest = destination(state, p.id, die);
   p.pos = dest;
-  const ev = { mover: p.id, from, die, dest, round: state.round, item: null, effect: null };
+  const ev = { mover: p.id, from, die, dest, round: state.round, item: null, effect: null, usedSum: dieIdx === 2 };
   // ニアミス: 隣のマスに他人(またはいたずら)のワナがあった
   for (const sq of [dest - 1, dest + 1]) {
     const it = state.items.get(sq);
@@ -299,7 +353,11 @@ export function move(state, dieIdx) {
         const victimAhead = dest > owner.pos;
         p.pos = Math.max(0, p.pos - TUNE.trapBack);
         p.stats.trapped++;
-        const gain = TUNE.trapGain + (victimAhead ? TUNE.trapGainLeader : 0);
+        // 賞金首: 単独の先頭に当てたら、差に応じて多く進む
+        const bounty = leaderBefore?.player.id === p.id ? bountyBefore : 0;
+        ev.bounty = bounty;
+        if (bounty) owner.stats.bounties++;
+        const gain = TUNE.trapGain + (victimAhead ? TUNE.trapGainLeader : 0) + bounty;
         owner.pos = Math.min(TUNE.goal - 1, owner.pos + gain);
         owner.stats.trapHits++;
         ev.effect = 'trap';
@@ -361,6 +419,7 @@ export function ranking(state) {
 export function awards(state) {
   const defs = [
     ['trapHits', '一番踏ませた人'],
+    ['bounties', '大物食い'],
     ['steals', '横取り王'],
     ['selfDestructs', '自爆王'],
     ['targeted', '一番狙われた人'],
