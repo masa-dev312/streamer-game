@@ -1,67 +1,105 @@
 :root {
-  --bg: #14121c;
-  --panel: #221f2e;
-  --line: #3a3550;
-  --text: #ece9f5;
-  --sub: #a7a1bd;
-  --accent: #ffd43b;
-  --danger: #ff6b6b;
+  --bg: #0b0907;
+  --panel: #1a1511;
+  --panel2: #241d17;
+  --line: #4a3f35;
+  --text: #f3e9d2;
+  --sub: #b8a98c;
+  --gold: #fcc419;
+  --trap: #e03131;
+  --wood: #6b4f2a;
 }
 * { box-sizing: border-box; }
 body {
   margin: 0;
-  background: var(--bg);
+  background: radial-gradient(ellipse at top, #1d1610 0%, var(--bg) 60%) fixed, var(--bg);
   color: var(--text);
   font-family: system-ui, "Hiragino Sans", "Noto Sans JP", "WenQuanYi Zen Hei", sans-serif;
 }
+.hidden { display: none !important; }
 .top { display: flex; align-items: center; gap: 16px; padding: 8px 16px; flex-wrap: wrap; }
-.top h1 { font-size: 18px; margin: 0; flex: 1; }
-.tag { font-size: 12px; color: var(--sub); font-weight: normal; }
-.mute { font-size: 13px; color: var(--sub); }
-.layout { display: flex; gap: 16px; padding: 0 16px 16px; align-items: flex-start; flex-wrap: wrap; }
-.stream { flex: 1 1 640px; min-width: 0; }
+.top h1 { font-size: 18px; margin: 0; flex: 1; color: var(--gold); letter-spacing: .05em; }
+.tag { font-size: 12px; color: var(--sub); font-weight: normal; letter-spacing: 0; }
+.toggle { font-size: 13px; color: var(--sub); }
+.layout { display: flex; gap: 16px; padding: 0 16px 16px; align-items: flex-start; }
+.stream { flex: 1 1 auto; min-width: 0; }
 .caption { font-size: 12px; color: var(--sub); margin-bottom: 4px; }
-canvas { width: 100%; height: auto; display: block; background: #0d0b14; border: 1px solid var(--line); border-radius: 6px; }
+canvas {
+  display: block; width: 100%; height: auto; aspect-ratio: 960 / 540;
+  max-width: calc((100vh - 90px) * 16 / 9); margin: 0 auto;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+  touch-action: manipulation;
+}
 .hand {
-  flex: 0 1 340px; width: 340px; max-width: 100%;
-  background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px;
+  flex: 0 0 340px; width: 340px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px;
+  max-height: calc(100vh - 70px); overflow: auto;
 }
+.hand h2 { font-size: 18px; margin: 4px 0 10px; color: var(--gold); }
 .hand h3 { font-size: 14px; margin: 14px 0 6px; color: var(--sub); }
-.phase { font-weight: bold; margin-bottom: 8px; }
-.cards { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+.phase { font-weight: bold; font-size: 17px; margin-bottom: 8px; }
+.field { display: block; margin: 10px 0; font-size: 14px; }
+.field input:not([type=radio]), .field select {
+  font: inherit; padding: 8px; margin-top: 4px; width: 100%;
+  background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px;
+}
+.modes { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px; }
+.modes label {
+  display: flex; align-items: center; gap: 6px; margin: 0; padding: 8px; font-size: 13px;
+  background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; cursor: pointer;
+}
+.modes label:has(input:checked) { border-color: var(--gold); background: #3a2d18; }
+.note { font-size: 12px; color: var(--sub); margin: 6px 0; }
 button {
-  font: inherit; color: var(--text); background: #332e47; border: 1px solid var(--line);
-  border-radius: 6px; padding: 8px 12px; cursor: pointer;
+  font: inherit; color: var(--text); background: var(--panel2); border: 1px solid var(--line);
+  border-radius: 8px; padding: 10px 14px; cursor: pointer; min-height: 44px;
 }
-button:hover:not(:disabled) { border-color: var(--accent); }
-button:disabled { opacity: .45; cursor: default; }
-button.sel { background: var(--accent); color: #1a1a1a; border-color: var(--accent); }
-button.primary { background: var(--accent); color: #1a1a1a; font-weight: bold; }
-.card-trap { border-left: 4px solid var(--danger); }
-.card-treasure { border-left: 4px solid #fcc419; }
-.card-fake { border-left: 4px solid #b197fc; }
+button:hover:not(:disabled) { border-color: var(--gold); }
+button:disabled { opacity: .4; cursor: default; }
+button.primary { background: var(--gold); color: #1a1208; border-color: var(--gold); font-weight: bold; }
+button.big { width: 100%; font-size: 17px; margin-top: 6px; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+.row > button { flex: 1 1 0; }
+.cards { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.card {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  width: 76px; padding: 8px 4px; font-size: 13px;
+}
+.card.sel { border-color: var(--gold); background: #3a2d18; box-shadow: 0 0 0 2px var(--gold) inset; }
+.icon { width: 30px; height: 30px; display: block; }
+.icon-trap { background: var(--trap); clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%); }
+.icon-treasure { background: linear-gradient(#fcc419 0 40%, #3d2b14 40% 48%, #c27c0e 48%); border-radius: 8px 8px 3px 3px; height: 24px; margin: 3px 0; }
+.icon-fake { background: #9775fa; opacity: .55; clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%); }
+.dice-choice { display: flex; gap: 8px; }
+.dice-choice button { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 6px; }
+.dice-choice b { font-size: 28px; color: var(--gold); line-height: 1; }
+.dice-choice small { color: var(--sub); font-size: 12px; }
 .hint { font-size: 13px; color: var(--sub); margin: 6px 0; }
-.alert { color: var(--accent); font-weight: bold; }
-.mine, .log { margin: 0; padding-left: 20px; font-size: 13px; color: var(--sub); max-height: 180px; overflow: auto; }
-.overlay {
-  position: fixed; inset: 0; background: rgba(8, 6, 14, .82);
-  display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 10;
-}
-.overlay.hidden { display: none; }
-.panel {
-  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
-  padding: 20px; width: 640px; max-width: 100%; max-height: 100%; overflow: auto;
-}
-.panel h2 { margin-top: 0; }
-.panel label { display: block; margin: 10px 0; }
-.panel input, .panel select { font: inherit; padding: 6px; margin-left: 6px; background: #14121c; color: var(--text); border: 1px solid var(--line); border-radius: 4px; }
-fieldset { border: 1px solid var(--line); border-radius: 6px; margin: 12px 0; }
-legend { font-size: 13px; color: var(--sub); }
-.mode { display: block; padding: 6px 4px; border-bottom: 1px dashed var(--line); }
-.mode:last-child { border-bottom: none; }
-.mode small { display: block; color: var(--sub); margin-left: 24px; }
-.note { font-size: 12px; color: var(--sub); }
-details { margin-top: 12px; font-size: 14px; }
-@media (max-width: 720px) {
-  .hand { width: 100%; flex-basis: 100%; }
+.alert { color: var(--gold); font-weight: bold; }
+.more { margin-top: 12px; font-size: 13px; }
+.more summary { color: var(--sub); cursor: pointer; padding: 4px 0; }
+.mine, .log { margin: 4px 0 0; padding-left: 20px; font-size: 13px; color: var(--sub); max-height: 160px; overflow: auto; }
+.rules { padding-left: 18px; font-size: 13px; color: var(--sub); }
+#rankList, #awardList { padding-left: 22px; font-size: 14px; }
+details summary { cursor: pointer; }
+
+/* スマホ縦向き: 盤面を縦長で描き、操作パネルは盤面の中央(コマの通り道の内側)に重ねる(main.js と同じ条件) */
+@media (max-width: 820px) and (orientation: portrait) {
+  .top { padding: 6px 12px; gap: 10px; }
+  .top h1 { font-size: 15px; flex-basis: 100%; }
+  .tag { display: none; }
+  .layout { flex-direction: column; gap: 8px; padding: 0 8px 8px; }
+  .stream { width: 100%; position: relative; }
+  .stream .caption { display: none; }
+  canvas { aspect-ratio: 540 / 960; max-width: 100%; max-height: none; }
+  .hand.inboard {
+    position: absolute; width: auto; flex: none; z-index: 5; max-height: none;
+    background: rgba(26, 21, 17, .96); border-radius: 10px; padding: 8px 10px; font-size: 14px;
+  }
+  .hand > .caption { display: none; }
+  .hand h2 { font-size: 16px; margin: 0 0 6px; }
+  .phase { font-size: 15px; }
+  .modes { grid-template-columns: 1fr; }
+  .card { width: 64px; padding: 6px 2px; }
+  .dice-choice b { font-size: 24px; }
 }
